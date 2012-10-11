@@ -1,0 +1,154 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <title>PageRank Hadoop by wangzuo</title>
+    <link rel="stylesheet" href="stylesheets/styles.css">
+    <link rel="stylesheet" href="stylesheets/pygment_trac.css">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"></script>
+    <script src="javascripts/main.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+
+  </head>
+  <body>
+
+      <header>
+        <h1>PageRank Hadoop</h1>
+        <p>My PageRank implementation with Hadoop</p>
+      </header>
+
+      <div id="banner">
+        <span id="logo"></span>
+
+        <a href="https://github.com/wangzuo/PageRank_Hadoop" class="button fork"><strong>View On GitHub</strong></a>
+        <div class="downloads">
+          <span>Downloads:</span>
+          <ul>
+            <li><a href="https://github.com/wangzuo/PageRank_Hadoop/zipball/master" class="button">ZIP</a></li>
+            <li><a href="https://github.com/wangzuo/PageRank_Hadoop/tarball/master" class="button">TAR</a></li>
+          </ul>
+        </div>
+      </div><!-- end banner -->
+
+    <div class="wrapper">
+      <nav>
+        <ul></ul>
+      </nav>
+      <section>
+        <h2>Introduction</h2>
+
+<p>The program implments a PageRank iterative calculation on a graph with Hadoop. The input data is a directed network (not html documents). There are mainly two phases of map-reduce. The second phase will be the phase to be iterative.</p>
+
+<h2>Usage</h2>
+
+<p>A bash script <code>pr</code> is provided.
+set <code>$HADOOP_INSTALL</code> to the directory of hadoop installation.</p>
+
+<pre><code>$ ./pr 1
+# run phase 1, input folder: graph_input, output folder: phase1_output
+$ ./pr 2 [iteration]
+# run phase 2 for [iterative] times, input folder: phase2_output_[i], output_folder: phase2_output_[i+1]
+</code></pre>
+
+<h2>About PageRank (review)</h2>
+
+<p><strong>Overall</strong>: The ranking of a page is determined by its estimated importance (determined by link structure) instead of by its content.
+A variation of <strong>Eigenvector centrality</strong>. 
+<img src="http://upload.wikimedia.org/math/3/0/1/301ac52562803bc429fe3d8dace97b6b.png" alt="PageRank equation"><img src="http://upload.wikimedia.org/math/0/3/1/03114db8703c7f3b642c7c43a7c5b2c0.png" alt=""></p>
+
+<p><strong>each iteration: PageRank divided by the number of outbound links L(j)</strong>
+<strong>probability distribution:</strong> the bigger the PageRank, the more important the page
+d = 0.85 <a href="http://michaelnielsen.org/blog/lectures-on-the-google-technology-stack-1-introduction-to-pagerank/">introduction to PageRank</a></p>
+
+<p>PageRank Convergence: It may never reach convergence for loops. Ususally 10 iterations will be enough.</p>
+
+<h2>Computing PageRank using MapReduce</h2>
+
+<h4>Phase 1 - Parse documents (web pages) for links</h4>
+
+<p>This phase is simplified by replacing web pages with a network file.</p>
+
+<h5>map</h5>
+
+<pre><code>A\tD    (A, D)
+B\tC    (B, C)
+C\tA    (C, A)
+D\tB    (D, B)
+C\tD    (C, D)
+</code></pre>
+
+<h4>reduce</h4>
+
+<pre><code>(A, D)  (A, (1.0:D))    
+(B, C)  (B, (1.0:C))
+(C, A)  (C, (1.0:A,D))
+(D, B)  (D, (1.0:B))
+(C, D)
+</code></pre>
+
+<h4>notice</h4>
+
+<p>PageRank results usually present in a probility distribution. In MapReduce program, there is no idea of number of nodes in the graph, all PageRank values are set 1.0 on initialization.</p>
+
+<h4>Phase 2 - Compute PageRank (Iteratively approach)</h4>
+
+<h5>map</h5>
+
+<pre><code>(A, (1.0:D))    (D, 1:1)    
+(B, (1.0:C))    (C, 1:1)
+(C, (1.0:A,D))  (A, 1:2)
+(D, (1.0:B))    (D, 1:2)
+                (B, 1:1)
+                **(A, D)**
+                **(B, C)**
+                **(C, AD)**
+                **(D, B)**
+</code></pre>
+
+<h5>reduce</h5>
+
+<pre><code>(D, 1:1)        (A, (0.5:D))
+(C, 1:1)        (B, (1.0:C))
+(A, 1:2)        (C, (1.0:A,D))
+(D, 1:2)        (D, (1.5:B))
+(B, 1:1)
+(A, D)
+(B, C)
+(C, AD)
+(D, B)
+</code></pre>
+
+<h5>notice</h5>
+
+<p>In mapping process, the graph structure is kept such that it can be iterative.
+updaing PageRank</p>
+
+<p>[new pr] = (dumping_value) * [old pr] + (1 - dumping_value)</p>
+
+<h4>Phase 3 - Sort the nodes by PageRank</h4>
+
+<p>Sort by PageRank value.</p>
+
+<h2>About Iterative MapReduce</h2>
+
+<p>The program implements simple bash script to do iterative MapReduce. It has to restart the hadoop in each iteration.</p>
+
+<p><a href="http://mahout.apache.org/">Apache Mahout</a>: restarting needed</p>
+
+<p><a href="http://www.cs.cmu.edu/%7Epegasus/">PEGASUS</a>: restarting needed</p>
+
+<p><a href="http://code.google.com/p/haloop/">haloop</a>: An modified version of Hadoop to support efficient iterative data processing on large commodity clusters</p>
+      </section>
+      <footer>
+        <p>Project maintained by <a href="https://github.com/wangzuo">wangzuo</a></p>
+        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="http://twitter.com/#!/michigangraham">mattgraham</a></small></p>
+      </footer>
+    </div>
+    <!--[if !IE]><script>fixScale(document);</script><![endif]-->
+    
+  </body>
+</html>
